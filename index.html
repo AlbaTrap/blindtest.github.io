@@ -42,12 +42,18 @@
 
   let timer = null;
   let lastTtsTime = 0;
-  let serverUrl = "http://192.168.0.166:8000/detect"; // zmień na IP laptopa w LAN
+  let serverUrl = "http://192.168.0.166:8000/detect"; 
 
   async function startCamera() {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-    video.srcObject = stream;
-    await video.play();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      video.srcObject = stream;
+      await video.play();
+      console.log("Camera started, resolution:", video.videoWidth, "x", video.videoHeight);
+    } catch (err) {
+      console.error("Camera error:", err);
+      alert('Nie udało się uruchomić kamery: ' + err.message);
+    }
   }
 
   function drawDetections(detections) {
@@ -80,6 +86,7 @@
 
     const phrases = detections.slice(0, 3).map(d => `${d.class} ${d.position}`);
     if (phrases.length > 0) {
+      console.log("Speaking:", phrases.join(', '));
       speakPhrase(phrases.join(', '));
     }
   }
@@ -88,13 +95,20 @@
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
 
+    // Debug: pokaż fragment base64
+    console.log("Sending frame to:", serverUrl);
+    console.log("Base64 prefix:", dataUrl.substring(0, 50));
+
     try {
       const response = await fetch(serverUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: dataUrl })
       });
+      console.log("Response status:", response.status);
       const data = await response.json();
+      console.log("Server response:", data);
+
       if (data.error) {
         console.warn("Server error:", data.error);
         return;
@@ -109,19 +123,21 @@
   document.getElementById('connectBtn').onclick = () => {
     statusEl.textContent = "Connected";
     const iv = Number(intervalInput.value) || 200;
+    console.log("Starting interval:", iv, "ms");
     timer = setInterval(sendFrameHttp, iv);
   };
 
   document.getElementById('disconnectBtn').onclick = () => {
     statusEl.textContent = "Disconnected";
     if (timer) { clearInterval(timer); timer = null; }
+    console.log("Disconnected, interval cleared");
   };
 
-  startCamera().catch(err => {
-    alert('Nie udało się uruchomić kamery: ' + err.message);
-  });
+  startCamera();
 </script>
+
 </body>
 </html>
+
 
 
