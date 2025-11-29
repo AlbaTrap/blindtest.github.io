@@ -15,7 +15,7 @@
 <body>
   <h3>YOLO Web App</h3>
   <div id="controls">
-    <input id="wsUrl" type="text" size="40" placeholder="ws://localhost:8000/ws" />
+    <input id="wsUrl" type="text" size="40" placeholder="http://192.168.0.166:8000/detect" />
     <button id="connectBtn">Connect</button>
     <button id="disconnectBtn">Disconnect</button>
     <label>Interval (ms): <input id="interval" type="number" value="200" /></label>
@@ -30,7 +30,7 @@
 
   <div id="status">Disconnected</div>
 
-  <script>
+<script>
   const video = document.getElementById('video');
   const canvas = document.getElementById('canvas');
   const overlay = document.getElementById('overlay');
@@ -49,7 +49,7 @@
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
       video.srcObject = stream;
       await video.play();
-      console.log("Camera started, resolution:", video.videoWidth, "x", video.videoHeight);
+      console.log("Camera started:", video.videoWidth, "x", video.videoHeight);
     } catch (err) {
       console.error("Camera error:", err);
       alert('Nie udało się uruchomić kamery: ' + err.message);
@@ -95,10 +95,7 @@
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
 
-    // Debug: pokaż fragment base64
     console.log("Sending frame to:", serverUrl);
-    console.log("Base64 prefix:", dataUrl.substring(0, 50));
-
     try {
       const response = await fetch(serverUrl, {
         method: "POST",
@@ -120,11 +117,30 @@
     }
   }
 
-  document.getElementById('connectBtn').onclick = () => {
-    statusEl.textContent = "Connected";
+  document.getElementById('connectBtn').onclick = async () => {
     const iv = Number(intervalInput.value) || 200;
-    console.log("Starting interval:", iv, "ms");
-    timer = setInterval(sendFrameHttp, iv);
+    try {
+      console.log("Testing connection to:", serverUrl);
+      const testResp = await fetch(serverUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: "" })
+      });
+
+      if (testResp.ok) {
+        const testData = await testResp.json();
+        console.log("Test response:", testData);
+        statusEl.textContent = "Connected";
+        console.log("Backend reachable, starting interval:", iv, "ms");
+        timer = setInterval(sendFrameHttp, iv);
+      } else {
+        statusEl.textContent = "Connection failed";
+        console.error("Backend not reachable, status:", testResp.status);
+      }
+    } catch (err) {
+      statusEl.textContent = "Connection failed";
+      console.error("Error connecting to backend:", err);
+    }
   };
 
   document.getElementById('disconnectBtn').onclick = () => {
@@ -135,9 +151,5 @@
 
   startCamera();
 </script>
-
 </body>
 </html>
-
-
-
