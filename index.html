@@ -42,7 +42,7 @@
 
   let timer = null;
   let lastTtsTime = 0;
-  let serverUrl = "http://localhost:8000/detect"; // zmień na IP laptopa w LAN
+  let serverUrl = "http://192.168.0.166:8000/detect"; // zmień na IP laptopa w LAN
 
   async function startCamera() {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
@@ -123,4 +123,5 @@
 </script>
 </body>
 </html>
+
 
