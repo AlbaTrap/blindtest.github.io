@@ -31,110 +31,96 @@
   <div id="status">Disconnected</div>
 
   <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const overlay = document.getElementById('overlay');
-    const ctx = canvas.getContext('2d');
-    const octx = overlay.getContext('2d');
-    const wsUrlInput = document.getElementById('wsUrl');
-    const statusEl = document.getElementById('status');
-    const connectBtn = document.getElementById('connectBtn');
-    const disconnectBtn = document.getElementById('disconnectBtn');
-    const intervalInput = document.getElementById('interval');
-    const ttsIntervalInput = document.getElementById('ttsInterval');
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const overlay = document.getElementById('overlay');
+  const ctx = canvas.getContext('2d');
+  const octx = overlay.getContext('2d');
+  const statusEl = document.getElementById('status');
+  const intervalInput = document.getElementById('interval');
+  const ttsIntervalInput = document.getElementById('ttsInterval');
 
-    let ws = null;
-    let timer = null;
-    let lastTtsTime = 0;
+  let timer = null;
+  let lastTtsTime = 0;
+  let serverUrl = "http://localhost:8000/detect"; // zmień na IP laptopa w LAN
 
-    // Kamera
-    async function startCamera() {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-      video.srcObject = stream;
-      await video.play();
-    }
+  async function startCamera() {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    video.srcObject = stream;
+    await video.play();
+  }
 
-    function drawDetections(detections) {
-      octx.clearRect(0, 0, overlay.width, overlay.height);
-      detections.forEach(det => {
-        const [x1, y1, x2, y2] = det.bbox;
-        octx.strokeStyle = 'magenta';
-        octx.lineWidth = 2;
-        octx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-        octx.fillStyle = 'rgba(0,0,0,0.6)';
-        octx.fillRect(x1, y1 - 20, 180, 20);
-        octx.fillStyle = 'white';
-        octx.font = '14px sans-serif';
-        const label = `${det.class} (${det.position}) ${det.confidence}`;
-        octx.fillText(label, x1 + 4, y1 - 6);
-      });
-    }
-
-    function speakPhrase(text) {
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.rate = 1.0; // możesz dopasować
-      speechSynthesis.speak(utter);
-    }
-
-    function speakDetections(detections) {
-      const now = Date.now();
-      const ttsIntervalMs = Number(ttsIntervalInput.value) * 1000;
-      if (now - lastTtsTime < ttsIntervalMs) return;
-      lastTtsTime = now;
-
-      // zbuduj krótką, skondensowaną frazę z kilku detekcji
-      const phrases = detections.slice(0, 3).map(d => `${d.class} ${d.position}`);
-      if (phrases.length > 0) {
-        speakPhrase(phrases.join(', '));
-      }
-    }
-
-    function sendFrame() {
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      // rysujemy klatkę do canvas, eksportujemy jako JPEG base64
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.6); // kompresja dla mniejszego transferu
-      ws.send(JSON.stringify({ image: dataUrl }));
-    }
-
-    connectBtn.onclick = () => {
-      const url = wsUrlInput.value.trim();
-      if (!url) return alert('Podaj ws URL serwera (np. ws://localhost:8000/ws)');
-      ws = new WebSocket(url);
-      ws.onopen = () => {
-        statusEl.textContent = 'Connected';
-        const iv = Number(intervalInput.value) || 200;
-        timer = setInterval(sendFrame, iv);
-      };
-      ws.onmessage = (ev) => {
-        try {
-          const data = JSON.parse(ev.data);
-          if (data.error) {
-            console.warn('Server error:', data.error);
-            return;
-          }
-          drawDetections(data.detections || []);
-          speakDetections(data.detections || []);
-        } catch (e) {
-          console.error('parse error', e);
-        }
-      };
-      ws.onclose = () => {
-        statusEl.textContent = 'Disconnected';
-        if (timer) { clearInterval(timer); timer = null; }
-      };
-      ws.onerror = (e) => {
-        console.error('ws error', e);
-      };
-    };
-
-    disconnectBtn.onclick = () => {
-      if (ws) ws.close();
-    };
-
-    startCamera().catch(err => {
-      alert('Nie udało się uruchomić kamery: ' + err.message);
+  function drawDetections(detections) {
+    octx.clearRect(0, 0, overlay.width, overlay.height);
+    detections.forEach(det => {
+      const [x1, y1, x2, y2] = det.bbox;
+      octx.strokeStyle = 'magenta';
+      octx.lineWidth = 2;
+      octx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+      octx.fillStyle = 'rgba(0,0,0,0.6)';
+      octx.fillRect(x1, y1 - 20, 180, 20);
+      octx.fillStyle = 'white';
+      octx.font = '14px sans-serif';
+      const label = `${det.class} (${det.position}) ${det.confidence}`;
+      octx.fillText(label, x1 + 4, y1 - 6);
     });
-  </script>
+  }
+
+  function speakPhrase(text) {
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 1.0;
+    speechSynthesis.speak(utter);
+  }
+
+  function speakDetections(detections) {
+    const now = Date.now();
+    const ttsIntervalMs = Number(ttsIntervalInput.value) * 1000;
+    if (now - lastTtsTime < ttsIntervalMs) return;
+    lastTtsTime = now;
+
+    const phrases = detections.slice(0, 3).map(d => `${d.class} ${d.position}`);
+    if (phrases.length > 0) {
+      speakPhrase(phrases.join(', '));
+    }
+  }
+
+  async function sendFrameHttp() {
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+
+    try {
+      const response = await fetch(serverUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: dataUrl })
+      });
+      const data = await response.json();
+      if (data.error) {
+        console.warn("Server error:", data.error);
+        return;
+      }
+      drawDetections(data.detections || []);
+      speakDetections(data.detections || []);
+    } catch (err) {
+      console.error("HTTP error:", err);
+    }
+  }
+
+  document.getElementById('connectBtn').onclick = () => {
+    statusEl.textContent = "Connected";
+    const iv = Number(intervalInput.value) || 200;
+    timer = setInterval(sendFrameHttp, iv);
+  };
+
+  document.getElementById('disconnectBtn').onclick = () => {
+    statusEl.textContent = "Disconnected";
+    if (timer) { clearInterval(timer); timer = null; }
+  };
+
+  startCamera().catch(err => {
+    alert('Nie udało się uruchomić kamery: ' + err.message);
+  });
+</script>
 </body>
 </html>
+
